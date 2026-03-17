@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ================= CUSTOM CSS =================
+# ================= UI =================
 st.markdown("""
 <style>
 .main {
@@ -26,18 +26,13 @@ st.markdown("""
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255,255,255,0.1);
 }
-.big-font {
-    font-size: 30px;
-    font-weight: bold;
-}
-.buy { color: #00ff9f; }
-.sell { color: #ff4b4b; }
-.hold { color: #f1c40f; }
+.buy { color: #00ff9f; font-weight: bold; }
+.sell { color: #ff4b4b; font-weight: bold; }
+.hold { color: #f1c40f; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# ================= HEADER =================
-st.markdown('<div class="big-font">💹 AI Trading Terminal</div>', unsafe_allow_html=True)
+st.title("💹 AI Trading Terminal")
 
 # ================= SIDEBAR =================
 st.sidebar.title("⚙️ Control Panel")
@@ -48,7 +43,7 @@ period = st.sidebar.selectbox("Timeframe", ["1mo", "3mo", "6mo", "1y", "2y"], ke
 if st.sidebar.button("🔄 Refresh Data"):
     st.cache_data.clear()
 
-# ================= LOAD DATA =================
+# ================= DATA =================
 @st.cache_data
 def load_data(stock, period):
     try:
@@ -62,14 +57,24 @@ def load_data(stock, period):
 with st.spinner("Fetching market data..."):
     data = load_data(stock, period)
 
-if data.empty:
-    st.error("❌ Invalid stock symbol or data unavailable")
+# ================= SAFETY CHECK =================
+if data is None or data.empty:
+    st.error("❌ No data found. Try another stock.")
+    st.stop()
+
+if len(data) < 20:
+    st.error("❌ Not enough data to analyze. Use a longer timeframe.")
     st.stop()
 
 # ================= INDICATORS =================
 data["MA20"] = data["Close"].rolling(20).mean()
 data["MA50"] = data["Close"].rolling(50).mean()
-data["MA200"] = data["Close"].rolling(200).mean()
+
+# Safe MA200
+if len(data) >= 200:
+    data["MA200"] = data["Close"].rolling(200).mean()
+else:
+    data["MA200"] = np.nan
 
 # RSI
 delta = data["Close"].diff()
@@ -84,8 +89,13 @@ exp2 = data["Close"].ewm(span=26).mean()
 data["MACD"] = exp1 - exp2
 data["Signal"] = data["MACD"].ewm(span=9).mean()
 
-# Drop NaNs
-data = data.dropna()
+# Drop only critical NaNs
+data = data.dropna(subset=["Close", "RSI", "MACD"])
+
+# ================= FINAL SAFETY =================
+if data.empty:
+    st.error("❌ Data insufficient after processing. Try longer timeframe.")
+    st.stop()
 
 latest = data.iloc[-1]
 
@@ -93,13 +103,16 @@ latest = data.iloc[-1]
 score = 0
 reasons = []
 
-if latest["MA50"] > latest["MA200"]:
-    score += 2
-    reasons.append("Strong Uptrend")
-else:
-    score -= 2
-    reasons.append("Downtrend")
+# Trend
+if not np.isnan(latest["MA200"]):
+    if latest["MA50"] > latest["MA200"]:
+        score += 2
+        reasons.append("Strong Uptrend")
+    else:
+        score -= 2
+        reasons.append("Downtrend")
 
+# RSI
 if latest["RSI"] < 30:
     score += 2
     reasons.append("Oversold")
@@ -107,6 +120,7 @@ elif latest["RSI"] > 70:
     score -= 2
     reasons.append("Overbought")
 
+# MACD
 if latest["MACD"] > latest["Signal"]:
     score += 1
     reasons.append("Bullish Momentum")
@@ -165,7 +179,9 @@ with col1:
 
     fig.add_trace(go.Scatter(x=data.index, y=data["MA20"], name="MA20"))
     fig.add_trace(go.Scatter(x=data.index, y=data["MA50"], name="MA50"))
-    fig.add_trace(go.Scatter(x=data.index, y=data["MA200"], name="MA200"))
+
+    if not data["MA200"].isna().all():
+        fig.add_trace(go.Scatter(x=data.index, y=data["MA200"], name="MA200"))
 
     fig.update_layout(template="plotly_dark", height=600)
 
