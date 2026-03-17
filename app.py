@@ -2,217 +2,194 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-import base64
-import os
+import plotly.express as px
 
-# ================= PAGE CONFIG =================
-st.set_page_config(page_title="AI Stock Decision PRO", layout="wide")
+# ================= CONFIG =================
+st.set_page_config(
+    page_title="AI Trading Terminal",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.title("🤖 AI Stock Decision PRO")
+# ================= CUSTOM CSS =================
+st.markdown("""
+<style>
+.main {
+    background: linear-gradient(135deg, #0f1117, #1a1d26);
+}
+.card {
+    background: rgba(255,255,255,0.05);
+    padding: 20px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.big-font {
+    font-size: 30px;
+    font-weight: bold;
+}
+.buy { color: #00ff9f; }
+.sell { color: #ff4b4b; }
+.hold { color: #f1c40f; }
+</style>
+""", unsafe_allow_html=True)
 
-# ================= PATH SETUP =================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BUY_SOUND_PATH = os.path.join(BASE_DIR, "assets", "buy.mp3")
-SELL_SOUND_PATH = os.path.join(BASE_DIR, "assets", "sell.mp3")
+# ================= HEADER =================
+st.markdown('<div class="big-font">💹 AI Trading Terminal</div>', unsafe_allow_html=True)
 
-# ================= SOUND FUNCTION =================
-def play_sound(file_path):
-    try:
-        if not os.path.exists(file_path):
-            return
+# ================= SIDEBAR =================
+st.sidebar.title("⚙️ Control Panel")
 
-        with open(file_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
+stock = st.sidebar.text_input("Stock Symbol", "AAPL", key="stock_input")
+period = st.sidebar.selectbox("Timeframe", ["1mo", "3mo", "6mo", "1y", "2y"], key="period")
 
-        audio_html = f"""
-        <audio autoplay>
-        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
-        </audio>
-        """
-        st.markdown(audio_html, unsafe_allow_html=True)
-    except:
-        pass
+if st.sidebar.button("🔄 Refresh Data"):
+    st.cache_data.clear()
 
-# ================= CACHE =================
+# ================= LOAD DATA =================
 @st.cache_data
-def load_data(stock):
+def load_data(stock, period):
     try:
-        data = yf.download(stock, period="1y")
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-        return data
+        df = yf.download(stock, period=period)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        return df
     except:
         return pd.DataFrame()
 
-# ================= INPUT =================
-stock = st.text_input(
-    "Enter Stock Symbol (AAPL, TSLA, INFY.NS)", 
-    value="AAPL",
-    key="stock_input_main"   # ✅ FIXED (unique key)
-)
+with st.spinner("Fetching market data..."):
+    data = load_data(stock, period)
 
-# ================= ANALYSIS =================
-def analyze_stock(data):
+if data.empty:
+    st.error("❌ Invalid stock symbol or data unavailable")
+    st.stop()
 
-    reasons = []
+# ================= INDICATORS =================
+data["MA20"] = data["Close"].rolling(20).mean()
+data["MA50"] = data["Close"].rolling(50).mean()
+data["MA200"] = data["Close"].rolling(200).mean()
 
-    data["MA50"] = data["Close"].rolling(50).mean()
-    data["MA200"] = data["Close"].rolling(200).mean()
+# RSI
+delta = data["Close"].diff()
+gain = delta.clip(lower=0).rolling(14).mean()
+loss = -delta.clip(upper=0).rolling(14).mean()
+rs = gain / loss
+data["RSI"] = 100 - (100 / (1 + rs))
 
-    delta = data["Close"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-    rs = gain / loss
-    data["RSI"] = 100 - (100 / (1 + rs))
+# MACD
+exp1 = data["Close"].ewm(span=12).mean()
+exp2 = data["Close"].ewm(span=26).mean()
+data["MACD"] = exp1 - exp2
+data["Signal"] = data["MACD"].ewm(span=9).mean()
 
-    exp1 = data["Close"].ewm(span=12).mean()
-    exp2 = data["Close"].ewm(span=26).mean()
-    data["MACD"] = exp1 - exp2
-    data["Signal"] = data["MACD"].ewm(span=9).mean()
+# Drop NaNs
+data = data.dropna()
 
-    data["BB_Mid"] = data["Close"].rolling(20).mean()
-    std = data["Close"].rolling(20).std()
-    data["BB_Upper"] = data["BB_Mid"] + 2 * std
-    data["BB_Lower"] = data["BB_Mid"] - 2 * std
+latest = data.iloc[-1]
 
-    data = data.dropna()
+# ================= AI ENGINE =================
+score = 0
+reasons = []
 
-    if data.empty:
-        return "HOLD", None, data, 0, ["Not enough data"]
+if latest["MA50"] > latest["MA200"]:
+    score += 2
+    reasons.append("Strong Uptrend")
+else:
+    score -= 2
+    reasons.append("Downtrend")
 
-    latest = data.iloc[-1]
-    score = 0
+if latest["RSI"] < 30:
+    score += 2
+    reasons.append("Oversold")
+elif latest["RSI"] > 70:
+    score -= 2
+    reasons.append("Overbought")
 
-    # Trend
-    if latest["MA50"] > latest["MA200"]:
-        score += 1
-        reasons.append("📈 Uptrend")
-    else:
-        score -= 1
-        reasons.append("📉 Downtrend")
+if latest["MACD"] > latest["Signal"]:
+    score += 1
+    reasons.append("Bullish Momentum")
+else:
+    score -= 1
+    reasons.append("Bearish Momentum")
 
-    # RSI
-    if latest["RSI"] < 30:
-        score += 1
-        reasons.append("Oversold")
-    elif latest["RSI"] > 70:
-        score -= 1
-        reasons.append("Overbought")
+# Decision
+if score >= 3:
+    decision = "BUY"
+elif score <= -3:
+    decision = "SELL"
+else:
+    decision = "HOLD"
 
-    # MACD
-    if latest["MACD"] > latest["Signal"]:
-        score += 1
-        reasons.append("Bullish MACD")
-    else:
-        score -= 1
-        reasons.append("Bearish MACD")
+confidence = min(abs(score) / 5 * 100, 100)
 
-    # Bollinger
-    if latest["Close"] < latest["BB_Lower"]:
-        score += 1
-        reasons.append("Near lower band")
-    elif latest["Close"] > latest["BB_Upper"]:
-        score -= 1
-        reasons.append("Near upper band")
+# ================= METRICS =================
+c1, c2, c3, c4 = st.columns(4)
 
-    if score >= 2:
-        decision = "BUY"
-    elif score <= -2:
-        decision = "SELL"
-    else:
-        decision = "HOLD"
+c1.metric("💰 Price", f"${latest['Close']:.2f}")
+c2.metric("📈 RSI", f"{latest['RSI']:.2f}")
+c3.metric("📊 MACD", f"{latest['MACD']:.2f}")
+c4.metric("🔥 Confidence", f"{confidence:.1f}%")
 
-    return decision, latest, data, score, reasons
+# ================= DECISION =================
+st.markdown("## 🎯 AI Verdict")
 
-# ================= SESSION =================
-if "last_decision" not in st.session_state:
-    st.session_state.last_decision = None
+if decision == "BUY":
+    st.markdown(f'<div class="card buy">📈 STRONG BUY<br>Confidence: {confidence:.1f}%</div>', unsafe_allow_html=True)
+elif decision == "SELL":
+    st.markdown(f'<div class="card sell">📉 SELL<br>Confidence: {confidence:.1f}%</div>', unsafe_allow_html=True)
+else:
+    st.markdown(f'<div class="card hold">⚖️ HOLD<br>Confidence: {confidence:.1f}%</div>', unsafe_allow_html=True)
 
-# ================= BUTTON =================
-if st.button("Analyze Stock", key="analyze_button"):
+st.write("### 🧠 Insights")
+for r in reasons:
+    st.write(f"- {r}")
 
-    data = load_data(stock)
+# ================= LAYOUT =================
+col1, col2 = st.columns([2,1])
 
-    if data is None or data.empty:
-        st.error("❌ Could not fetch stock data")
-        st.stop()
+# ================= MAIN CHART =================
+with col1:
+    st.markdown("## 📊 Price Chart")
 
-    decision, latest, data, score, reasons = analyze_stock(data)
+    fig = go.Figure()
 
-    st.subheader(f"📊 Decision for {stock}")
+    fig.add_trace(go.Candlestick(
+        x=data.index,
+        open=data["Open"],
+        high=data["High"],
+        low=data["Low"],
+        close=data["Close"]
+    ))
 
-    col1, col2 = st.columns([1,2])
+    fig.add_trace(go.Scatter(x=data.index, y=data["MA20"], name="MA20"))
+    fig.add_trace(go.Scatter(x=data.index, y=data["MA50"], name="MA50"))
+    fig.add_trace(go.Scatter(x=data.index, y=data["MA200"], name="MA200"))
 
-    # ================= LEFT PANEL =================
-    with col1:
-        if decision == "BUY":
-            st.success("📈 BUY")
-        elif decision == "SELL":
-            st.error("📉 SELL")
-        else:
-            st.warning("⚖️ HOLD")
+    fig.update_layout(template="plotly_dark", height=600)
 
-        # SOUND
-        if decision != st.session_state.last_decision:
-            if decision == "BUY":
-                play_sound(BUY_SOUND_PATH)
-            elif decision == "SELL":
-                play_sound(SELL_SOUND_PATH)
+    st.plotly_chart(fig, use_container_width=True)
 
-        st.session_state.last_decision = decision
+# ================= SIDE PANELS =================
+with col2:
+    st.markdown("## 📉 RSI")
+    fig2 = px.line(data, y="RSI")
+    fig2.add_hline(y=70)
+    fig2.add_hline(y=30)
+    fig2.update_layout(template="plotly_dark", height=250)
+    st.plotly_chart(fig2, use_container_width=True)
 
-        # Confidence
-        confidence = min(abs(score)/4*100, 100)
-        st.progress(int(confidence))
-        st.write(f"Confidence: {round(confidence,2)}%")
+    st.markdown("## ⚡ MACD")
+    fig3 = go.Figure()
+    fig3.add_trace(go.Scatter(x=data.index, y=data["MACD"], name="MACD"))
+    fig3.add_trace(go.Scatter(x=data.index, y=data["Signal"], name="Signal"))
+    fig3.update_layout(template="plotly_dark", height=250)
+    st.plotly_chart(fig3, use_container_width=True)
 
-        st.write("### 🧠 Why?")
-        for r in reasons:
-            st.write(f"- {r}")
+# ================= VOLUME =================
+st.markdown("## 📦 Volume")
 
-    # ================= RIGHT PANEL =================
-    tab1, tab2, tab3 = st.tabs(["📈 Chart", "📊 Indicators", "📦 Volume"])
-
-    with tab1:
-        try:
-            fig = go.Figure(data=[go.Candlestick(
-                x=data.index,
-                open=data['Open'],
-                high=data['High'],
-                low=data['Low'],
-                close=data['Close']
-            )])
-            st.plotly_chart(fig, use_container_width=True)
-        except:
-            st.warning("Chart failed")
-
-    with tab2:
-        try:
-            fig1, ax = plt.subplots()
-            ax.plot(data["Close"])
-            ax.plot(data["MA50"])
-            ax.plot(data["MA200"])
-            st.pyplot(fig1)
-
-            fig2, ax2 = plt.subplots()
-            ax2.plot(data["RSI"])
-            ax2.axhline(70)
-            ax2.axhline(30)
-            st.pyplot(fig2)
-        except:
-            st.warning("Indicator chart failed")
-
-    with tab3:
-        try:
-            fig3 = go.Figure()
-            fig3.add_bar(x=data.index, y=data["Volume"])
-            st.plotly_chart(fig3, use_container_width=True)
-        except:
-            st.warning("Volume chart failed")
-
-# ================= CACHE CLEAR =================
-if st.button("Clear Cache", key="clear_cache_button"):
-    st.cache_data.clear()
-    st.success("Cache cleared!")
+fig4 = px.bar(data, y="Volume")
+fig4.update_layout(template="plotly_dark", height=300)
+st.plotly_chart(fig4, use_container_width=True)
