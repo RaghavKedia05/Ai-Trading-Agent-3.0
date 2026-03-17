@@ -3,11 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import plotly.graph_objects as goimport streamlit as st
-import yfinance as yf
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import base64
 import os
