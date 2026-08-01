@@ -1,0 +1,6 @@
+[
+  {"name":"NIFTY 50","value":24853.4,"change":0.82,"status":"Open","history":[{"label":"10:00","value":24640},{"label":"11:00","value":24710},{"label":"12:00","value":24685},{"label":"13:00","value":24780},{"label":"14:00","value":24820},{"label":"15:00","value":24853}]},
+  {"name":"SENSEX","value":81596.7,"change":0.64,"status":"Open","history":[{"label":"10:00","value":81020},{"label":"11:00","value":81250},{"label":"12:00","value":81190},{"label":"13:00","value":81410},{"label":"14:00","value":81480},{"label":"15:00","value":81597}]},
+  {"name":"BANK NIFTY","value":55945.2,"change":-0.21,"status":"Open","history":[{"label":"10:00","value":56120},{"label":"11:00","value":56080},{"label":"12:00","value":56160},{"label":"13:00","value":56020},{"label":"14:00","value":55980},{"label":"15:00","value":55945}]},
+  {"name":"NIFTY IT","value":38721.6,"change":1.17,"status":"Open","history":[{"label":"10:00","value":38180},{"label":"11:00","value":38310},{"label":"12:00","value":38440},{"label":"13:00","value":38510},{"label":"14:00","value":38680},{"label":"15:00","value":38722}]}
+]

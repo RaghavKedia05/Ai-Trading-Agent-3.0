@@ -133,6 +133,21 @@ The simulation does not model taxes, detailed slippage, bid/ask spread, market i
 | **pytest** | Automated test suite |
 | **Ruff** | Formatting and static code checks |
 
+### StockWise Frontend
+
+The `frontend/` workspace provides the full multi-page StockWise product experience requested for the platform.
+
+| Technology | Purpose |
+|---|---|
+| **React + TypeScript** | Component-based, type-safe application UI |
+| **Tailwind CSS** | Responsive design system and layout |
+| **History API router** | Lightweight client-side navigation and stock-detail routes |
+| **Recharts** | Price, financial, and sparkline visualizations |
+| **Lucide React** | Accessible interface icons |
+| **Vite** | Development server and optimized production builds |
+
+All frontend market content is clearly labeled demo data and stored in JSON files under `frontend/src/data/`, allowing live APIs to replace it later without restructuring the page components.
+
 ## Project Structure
 
 ```text
@@ -145,6 +160,11 @@ The simulation does not model taxes, detailed slippage, bid/ask spread, market i
 |   |-- models.py           # Shared immutable result models
 |   `-- strategy.py         # Signals, confidence, and backtesting
 |-- tests/                  # Data, indicator, strategy, and import tests
+|-- frontend/               # React and TypeScript StockWise product UI
+|   |-- src/components/     # Navigation, charts, cards, tables, and layout
+|   |-- src/data/           # API-ready Indian market mock JSON
+|   |-- src/pages/          # Home, dashboard, screener, stock, news, and watchlist
+|   `-- package.json        # Frontend scripts and dependencies
 |-- .streamlit/config.toml  # Streamlit theme and server settings
 |-- requirements.txt        # Runtime dependencies
 |-- requirements-dev.txt    # Development dependencies
@@ -176,12 +196,36 @@ python -m streamlit run app.py
 
 Open `http://localhost:8501` if it does not open automatically.
 
+### Run the StockWise frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+Create a production frontend bundle with:
+
+```bash
+npm run build
+```
+
 ## Testing
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest
 python -m ruff check .
+```
+
+Frontend checks:
+
+```bash
+cd frontend
+npm run lint
+npm run build
 ```
 
 The tests cover symbol validation, indicator edge cases, signal and confidence behavior, backtest integrity, and public application imports.
