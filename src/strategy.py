@@ -12,7 +12,7 @@ def _available(value: object) -> bool:
 
 def _confidence(verdict: str, normalized_score: float, coverage: float) -> tuple[float, str]:
     """Estimate verdict clarity from rule agreement and indicator availability."""
-    if verdict == "NEUTRAL":
+    if verdict == "HOLD":
         distance_from_boundary = min(abs(normalized_score) / 0.5, 1.0)
         clarity = 50 + (30 * (1 - distance_from_boundary))
     else:
@@ -76,11 +76,11 @@ def evaluate_signal(row: pd.Series) -> SignalResult:
 
     normalized = score / max_score if max_score else 0.0
     if normalized >= 0.5:
-        verdict = "BULLISH"
+        verdict = "BUY"
     elif normalized <= -0.5:
-        verdict = "BEARISH"
+        verdict = "SELL"
     else:
-        verdict = "NEUTRAL"
+        verdict = "HOLD"
 
     confidence, confidence_label = _confidence(verdict, normalized, max_score / 6)
 

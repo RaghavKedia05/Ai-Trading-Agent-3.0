@@ -21,7 +21,7 @@ class StrategyTests(unittest.TestCase):
             }
         )
         signal = evaluate_signal(row)
-        self.assertEqual(signal.verdict, "BULLISH")
+        self.assertEqual(signal.verdict, "BUY")
         self.assertEqual(signal.score, 6)
         self.assertEqual(signal.max_score, 6)
         self.assertEqual(signal.strength, 100.0)
@@ -42,7 +42,7 @@ class StrategyTests(unittest.TestCase):
             }
         )
         signal = evaluate_signal(row)
-        self.assertEqual(signal.verdict, "NEUTRAL")
+        self.assertEqual(signal.verdict, "HOLD")
         self.assertGreaterEqual(signal.confidence, 0)
         self.assertLessEqual(signal.confidence, 100)
 

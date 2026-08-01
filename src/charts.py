@@ -126,9 +126,9 @@ def equity_chart(equity: pd.DataFrame) -> go.Figure:
 
 def confidence_gauge(confidence: float, verdict: str) -> go.Figure:
     color = {
-        "BULLISH": COLORS["up"],
-        "BEARISH": COLORS["down"],
-        "NEUTRAL": COLORS["ma20"],
+        "BUY": COLORS["up"],
+        "SELL": COLORS["down"],
+        "HOLD": COLORS["ma20"],
     }[verdict]
     fig = go.Figure(
         go.Indicator(

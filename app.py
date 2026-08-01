@@ -112,12 +112,52 @@ st.markdown(
         text-transform: uppercase;
         margin-bottom: 0.2rem;
     }
+    .decision-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 2rem;
+        margin: 0.9rem 0 1rem;
+        padding: 1.05rem 1.2rem;
+        border: 1px solid #263547;
+        border-left-width: 4px;
+        border-radius: 6px;
+        background: #101720;
+    }
+    .decision-buy { border-left-color: #2dd4bf; }
+    .decision-hold { border-left-color: #fbbf24; }
+    .decision-sell { border-left-color: #fb7185; }
+    .decision-label {
+        color: #8491a3;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .decision-value {
+        margin-top: 0.15rem;
+        color: #f8fafc;
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+    .decision-buy .decision-value { color: #2dd4bf; }
+    .decision-hold .decision-value { color: #fbbf24; }
+    .decision-sell .decision-value { color: #fb7185; }
+    .decision-summary { color: #9aa7b7; font-size: 0.82rem; margin-top: 0.45rem; }
+    .confidence-block { min-width: 150px; text-align: right; }
+    .confidence-value { color: #f8fafc; font-size: 1.65rem; font-weight: 750; }
+    .confidence-caption { color: #8491a3; font-size: 0.72rem; }
     @media (max-width: 700px) {
         .block-container { padding-left: 0.75rem; padding-right: 0.75rem; }
         h1 { font-size: 1.45rem !important; }
         [data-testid="stMetric"] { min-height: 96px; }
         .market-status { display: none; }
         .stTabs [data-baseweb="tab"] { min-width: auto; padding: 0.5rem 0.7rem; }
+        .decision-banner { align-items: flex-start; gap: 1rem; padding: 0.9rem; }
+        .decision-value { font-size: 1.65rem; }
+        .confidence-block { min-width: auto; }
+        .confidence-value { font-size: 1.35rem; }
+        [data-testid="stHorizontalBlock"] { gap: 0.55rem; }
     }
     </style>
     """,
@@ -208,27 +248,48 @@ with identity:
 with timestamp:
     last_session = pd.Timestamp(analysis.index[-1]).strftime("%d %b %Y")
     stale_label = " · Data may be stale" if is_stale(analysis) else ""
-    st.caption(f"Adjusted daily prices · Last session {last_session}{stale_label}")
+    st.caption(f"Latest available adjusted data · Session {last_session}{stale_label}")
 
 price_change = latest["Close"] / previous["Close"] - 1
 avg_volume = latest.get("AVG_VOLUME20")
 relative_volume = latest["Volume"] / avg_volume if pd.notna(avg_volume) and avg_volume else float("nan")
+recommendation_class = signal.verdict.lower()
+recommendation_summary = {
+    "BUY": "The weighted technical setup currently favors upward exposure.",
+    "HOLD": "The weighted indicators are mixed; waiting may offer a clearer setup.",
+    "SELL": "The weighted technical setup currently favors reducing or avoiding exposure.",
+}[signal.verdict]
+st.markdown(
+    f"""
+    <div class="decision-banner decision-{recommendation_class}">
+        <div>
+            <div class="decision-label">Current model recommendation</div>
+            <div class="decision-value">{signal.verdict}</div>
+            <div class="decision-summary">{recommendation_summary}</div>
+        </div>
+        <div class="confidence-block">
+            <div class="decision-label">Technical confidence</div>
+            <div class="confidence-value">{signal.confidence:.0f}%</div>
+            <div class="confidence-caption">{signal.confidence_label} rule agreement</div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 metric_columns = st.columns(6)
 metric_columns[0].metric("Last close", money(latest["Close"], info.currency), percent(price_change))
-metric_columns[1].metric("Signal", signal.verdict, f"{signal.score:+d} / {signal.max_score}")
-metric_columns[2].metric(
-    "Confidence",
-    f"{signal.confidence:.0f}%",
-    signal.confidence_label,
-    help="Clarity of rule agreement and indicator coverage; not a forecast probability",
-)
-metric_columns[3].metric("RSI (14)", f"{latest['RSI']:.1f}")
+metric_columns[1].metric("Session move", percent(price_change))
+metric_columns[2].metric("RSI (14)", f"{latest['RSI']:.1f}")
+metric_columns[3].metric("MACD", f"{latest['MACD']:.2f}")
 metric_columns[4].metric("Relative volume", f"{relative_volume:.2f}×" if pd.notna(relative_volume) else "N/A")
 metric_columns[5].metric(
     "ATR (14)", money(latest["ATR14"], info.currency) if pd.notna(latest.get("ATR14")) else "N/A"
 )
 
-overview_tab, technical_tab, backtest_tab, data_tab = st.tabs(["Overview", "Technicals", "Backtest", "Data"])
+overview_tab, technical_tab, backtest_tab, data_tab = st.tabs(
+    ["Summary", "Price & Technicals", "Strategy Test", "Market Data"]
+)
 
 with overview_tab:
     st.markdown('<div class="section-kicker">Market overview</div>', unsafe_allow_html=True)
@@ -243,19 +304,19 @@ with overview_tab:
                 width="stretch",
                 config={"displayModeBar": False},
             )
-            st.markdown(f"**{signal.confidence_label} confidence · {signal.verdict.title()}**")
+            st.markdown(f"**{signal.confidence_label} confidence · {signal.verdict}**")
             st.caption(
                 "Measures rule agreement and data coverage. It is not the probability of a profitable trade."
             )
 
         with st.container(border=True):
             st.subheader("Signal evidence")
-            if signal.verdict == "BULLISH":
-                st.success("Conditions lean bullish")
-            elif signal.verdict == "BEARISH":
-                st.error("Conditions lean bearish")
+            if signal.verdict == "BUY":
+                st.success("Technical rules favor BUY")
+            elif signal.verdict == "SELL":
+                st.error("Technical rules favor SELL")
             else:
-                st.warning("Conditions are mixed")
+                st.warning("Technical rules favor HOLD")
             for reason in signal.reasons:
                 st.write(reason)
             for caution in signal.cautions:
@@ -328,6 +389,6 @@ with data_tab:
 
 st.divider()
 st.caption(
-    "For educational and research use only. This dashboard provides rule-based technical analysis, not "
-    "personalized investment advice or a recommendation to trade."
+    "For research and educational use only. BUY, HOLD, and SELL are outputs from a rule-based technical "
+    "model, not personalized financial advice. Yahoo Finance data may be delayed."
 )
